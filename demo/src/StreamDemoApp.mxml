@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="800" height="400" creationComplete="init()">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.attask.api.StreamClient;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.IndexChangedEvent;
+			import mx.formatters.DateFormatter;
+			import mx.managers.PopUpManager;
+			
+			import spark.events.IndexChangeEvent;
+			
+			protected var loginWindow:LoginWindow;
+			
+			public var client:StreamClient; //this object allows us to interact with the AtTask APIs
+			
+			[Bindable]
+			protected var session:Object;
+			
+			protected var user:Object;
+			
+			[Bindable]
+			protected var projects:ArrayCollection;
+			
+			[Bindable]
+			protected var selectedProject:Object;
+			
+			protected function init():void {
+				showLoginWindow(); //on startup we need a user to log in
+			}
+			
+			public function showLoginWindow():void {
+				loginWindow = PopUpManager.createPopUp(this, LoginWindow, true) as LoginWindow;
+				
+				loginWindow.addEventListener(LoginEvent.LOGIN, function(event:LoginEvent):void {
+					client = new StreamClient(event.apiURL); //create an instance of the StreamClient
+					client.login(event.username, event.password, handleLogin); //log in.
+				});
+				
+				PopUpManager.centerPopUp(loginWindow);
+			}
+			
+			protected function handleLogin(response:Object, fail:Object):void {
+				session = response; //the response includes our session information, so we preserve it here.
+				if(response) { //the client returns a response object on success and a fail object on failure
+					PopUpManager.removePopUp(loginWindow);
+					loginWindow = null;
+					//after successful login, let's get the user object
+					client.get(StreamClient.OBJCODE_USER, session['userID'], null, new <String>["ID", "homeGroupID", "emailAddr"], handleGetUser);
+				}
+			}
+			
+			protected function handleGetUser(response:Object, fail:Object):void {
+					user = response; //store the user information
+					if(response) {
+						lblUser.text = "Welcome, " + user["name"] + "!";
+						
+						var params:Object = {"groupID": user['homeGroupID']};
+						var fields:Vector.<String> = new <String>["ID", "name"];
+						
+						//search for projects in the logged in user's home group
+						client.search(StreamClient.OBJCODE_PROJECT, params, fields, handleSearchProjects); 
+					}
+			}
+			
+			protected function handleSearchProjects(response:Object, fail:Object):void {
+				if(response) {
+					//projects is the dataprovider for our list.
+					projects = new ArrayCollection(response as Array);
+				}
+			}
+			
+			protected function newProject():void {
+				var df:DateFormatter = new DateFormatter();
+				df.formatString = "Created on MMM D at K:NN:SS A"
+				
+				var params:Object = {"name": "New Project - " + df.format(new Date()), "groupID": user['homeGroupID']};
+				
+				//to create a new object, use post.
+				client.post(StreamClient.OBJCODE_PROJECT, params, null, handleNewProject);
+			}
+			
+			protected function handleNewProject(response:Object, fail:Object):void {
+				if(response)
+					projects.addItem(response); //successfully created a project, add it to the list.
+				else if(fail)
+					Alert.show(fail.error.message, "Uh Oh!");
+			}
+			
+			protected function deleteProject():void {
+				//to delete an object, use remove.  (delete is a reserved word in flex)
+				client.remove(StreamClient.OBJCODE_PROJECT, projectList.selectedItem.ID, false, handleDeleteProject);
+			}
+		
+			protected function handleDeleteProject(response:Object, fail:Object):void {
+				if(response && response.success) {
+					//since the project was successfully deleted, we remove it from our list
+					projects.removeItemAt(projectList.selectedIndex);
+					selectedProject = null;
+				}else if(fail)
+					Alert.show(fail.error.message, "Uh Oh!");
+			}
+			
+			protected function onListChange(event:IndexChangeEvent):void {
+				var proj:Object = projects.getItemAt(event.newIndex);
+				//when a project is selected in the list, we request for it's object with the 'description' property
+				client.get(StreamClient.OBJCODE_PROJECT, proj.ID, null, new <String>["description"], handleGetProject);			
+			}
+			
+			protected function handleGetProject(response:Object, fail:Object):void {
+				if(response) {
+					selectedProject = response;
+				}
+			}	
+			
+			protected function updateProject():void {
+				var params:Object = {
+					"name": txtProjectName.text,
+					"description": txtProjectDescription.text
+				};
+				//to update an object, use put.  Here we update only the name and description for  a project
+				client.put(StreamClient.OBJCODE_PROJECT, selectedProject.ID, params,new <String>["description"],handleUpdateProject);
+			}
+			
+			protected function handleUpdateProject(response:Object, fail:Object):void {
+				if(response) {
+					//update the item in our list that was just successfully edited with new name and description properties.
+					projects.getItemAt(projectList.selectedIndex).name = response.name;
+					projects.getItemAt(projectList.selectedIndex).description = response.description;
+					projects.refresh();
+					
+					//clear the selection
+					projectList.selectedItems = null;
+					selectedProject = null;
+				}else if(fail)
+					Alert.show(fail.error.message, "Uh Oh!");
+			}
+			
+			protected function logout():void {
+				client.logout(function(response:Object, fail:Object):void {
+					if(response) {
+						projects = new ArrayCollection();
+						selectedProject = null;
+						session = null;
+						user = null;
+						showLoginWindow();
+					}
+				});
+			}
+			
+		]]>
+	</fx:Script>
+	<s:VGroup width="100%" height="400" paddingTop="10" paddingLeft="10" paddingRight="10" paddingBottom="10" visible="{session}">
+		<s:Label id="lblUser" fontWeight="bold" color="0x6D6E70"/>
+		<s:HGroup width="100%" height="100%">
+			<s:VGroup height="100%" width="50%">
+				<s:Label text="Projects"/>
+				<s:List id="projectList" dataProvider="{projects}" itemRenderer="ProjectListRenderer" width="100%" height="230" change="onListChange(event)"/>
+				<s:HGroup>
+					<s:Button label="New" click="newProject()"/>
+					<s:Button label="Delete" enabled="{projectList.selectedIndex>=0}" click="deleteProject()"/>
+				</s:HGroup>
+			</s:VGroup>
+			<s:VGroup height="100%" width="50%" visible="{selectedProject}">
+				<s:VGroup width="100%">
+					<s:Label text="Name:"/>
+					<s:TextInput id="txtProjectName" text="{selectedProject.name}" width="100%"/>
+				</s:VGroup>
+				<s:VGroup width="100%">
+					<s:Label text="Description:"/>
+					<s:TextArea id="txtProjectDescription" text="{selectedProject.description}" width="100%" heightInLines="12"/>
+				</s:VGroup>
+				<s:Button label="Save Project Details" click="updateProject()"/>
+			</s:VGroup>
+		</s:HGroup>
+		<s:Button label="Log out" click="logout()"/>
+	</s:VGroup>
+</s:Application>

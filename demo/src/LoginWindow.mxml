@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="400" height="194" creationComplete="init()" title="Please Log In">
+	<s:layout>
+		<s:HorizontalLayout paddingTop="10" paddingLeft="10" paddingBottom="10" paddingRight="10"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			protected function init():void {
+				txtUsername.setFocus();
+				txtPassword.addEventListener(KeyboardEvent.KEY_DOWN, function(evt:KeyboardEvent):void {
+					if(evt.keyCode == Keyboard.ENTER)
+						login();
+				});
+			}
+			
+			protected function login():void {
+				dispatchEvent(new LoginEvent(LoginEvent.LOGIN, txtURL.text, txtUsername.text, txtPassword.text));
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup width="50%" height="100%">
+		<s:Label text="AtTask API URL" width="100%" height="30" verticalAlign="middle" textAlign="left" fontWeight="normal" fontSize="14"/>
+		<s:Label text="Username" width="100%" height="30" verticalAlign="middle" textAlign="left" fontWeight="normal" fontSize="14"/>
+		<s:Label text="Password" width="100%" height="30" verticalAlign="middle" textAlign="left" fontWeight="normal" fontSize="14"/>
+		<s:Button label="Log in" click="login()"/>
+	</s:VGroup>
+	<s:VGroup width="50%" height="100%">
+		<s:TextInput id="txtURL" text="http://localhost:8080/attask/api" width="100%" height="30"/>
+		<s:TextInput id="txtUsername" width="100%" height="30"/>
+		<s:TextInput id="txtPassword" width="100%" height="30" displayAsPassword="true"/>
+	</s:VGroup>
+</s:TitleWindow>
